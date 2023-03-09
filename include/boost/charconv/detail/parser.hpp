@@ -19,6 +19,22 @@
 
 namespace boost { namespace charconv { namespace detail {
 
+#ifdef BOOST_CHARCONV_HAS_INT128
+template <typename Unsigned_Integer, typename std::enable_if<std::is_same<Unsigned_Integer, boost::uint128_type>::value, bool>::type = true>
+inline from_chars_result from_chars_dispatch(const char* first, const char* last, Unsigned_Integer& value, int base = 10)
+{
+    return from_chars128(first, last, value, base);
+}
+
+template <typename Unsigned_Integer, typename std::enable_if<!std::is_same<Unsigned_Integer, boost::uint128_type>::value, bool>::type = true>
+#else
+template <typename Unsigned_Integer>
+#endif
+inline from_chars_result from_chars_dispatch(const char* first, const char* last, Unsigned_Integer& value, int base = 10)
+{
+    return from_chars(first, last, value, base);
+}
+
 template <typename Unsigned_Integer, typename Integer>
 inline from_chars_result parser(const char* first, const char* last, bool& sign, Unsigned_Integer& significand, Integer& exponent, chars_format fmt = chars_format::general) noexcept
 {
@@ -92,11 +108,11 @@ inline from_chars_result parser(const char* first, const char* last, bool& sign,
         from_chars_result r;
         if (fmt == chars_format::hex)
         {
-            r = from_chars(significand_buffer, significand_buffer + offset, significand, 16);
+            r = from_chars_dispatch(significand_buffer, significand_buffer + offset, significand, 16);
         }
         else
         {
-            r = from_chars(significand_buffer, significand_buffer + offset, significand);
+            r = from_chars_dispatch(significand_buffer, significand_buffer + offset, significand);
         }
         switch (r.ec)
         {
@@ -162,11 +178,11 @@ inline from_chars_result parser(const char* first, const char* last, bool& sign,
         from_chars_result r;
         if (fmt == chars_format::hex)
         {
-            r = from_chars(significand_buffer, significand_buffer + offset, significand, 16);
+            r = from_chars_dispatch(significand_buffer, significand_buffer + offset, significand, 16);
         }
         else
         {
-            r = from_chars(significand_buffer, significand_buffer + offset, significand);
+            r = from_chars_dispatch(significand_buffer, significand_buffer + offset, significand);
         }
         switch (r.ec)
         {
@@ -208,11 +224,11 @@ inline from_chars_result parser(const char* first, const char* last, bool& sign,
         from_chars_result r;
         if (fmt == chars_format::hex)
         {
-            r = from_chars(significand_buffer, significand_buffer + offset, significand, 16);
+            r = from_chars_dispatch(significand_buffer, significand_buffer + offset, significand, 16);
         }
         else
         {
-            r = from_chars(significand_buffer, significand_buffer + offset, significand);
+            r = from_chars_dispatch(significand_buffer, significand_buffer + offset, significand);
         }
         switch (r.ec)
         {

@@ -5,11 +5,14 @@
 
 #include <boost/charconv/detail/config.hpp>
 #include <boost/charconv/detail/parser.hpp>
+#include <boost/charconv/detail/bit_layouts.hpp>
 #include <boost/charconv/detail/compute_float32.hpp>
 #include <boost/charconv/detail/compute_float64.hpp>
+
+#if !((BOOST_CHARCONV_LDBL_BITS == 64 || defined(BOOST_MSVC))) && defined(BOOST_CHARCONV_HAS_INT128)
 #include <boost/charconv/detail/compute_float80.hpp>
-#include <boost/charconv/detail/bit_layouts.hpp>
-// TODO: compute_float128.hpp
+#endif
+
 #include <boost/charconv/from_chars.hpp>
 #include <string>
 #include <cstdlib>
@@ -76,8 +79,7 @@ boost::charconv::from_chars_result boost::charconv::from_chars(const char* first
     return r;
 }
 
-/*
-#if BOOST_CHARCONV_LDBL_BITS == 64 || defined(_WIN64) || defined(_WIN32)
+#if BOOST_CHARCONV_LDBL_BITS == 64 || defined(BOOST_MSVC)
 // Since long double is just a double we use the double implementation and cast into value
 boost::charconv::from_chars_result boost::charconv::from_chars(const char* first, const char* last, long double& value, boost::charconv::chars_format fmt) noexcept
 {
@@ -87,14 +89,14 @@ boost::charconv::from_chars_result boost::charconv::from_chars(const char* first
     return r;
 }
 
-#elif BOOST_CHARCONV_LDBL_BITS == 80
+#elif (BOOST_CHARCONV_LDBL_BITS == 80 || BOOST_CHARCONV_LDBL_BITS == 128) && defined(BOOST_CHARCONV_HAS_INT128)
+// Works for both 80 and 128 bit long doubles becuase they both allow for normal standard library functions
 // https://en.wikipedia.org/wiki/Extended_precision#x86_extended_precision_format
-// 63 bit significand so we are still safe to use uint64_t to represent
 boost::charconv::from_chars_result boost::charconv::from_chars(const char* first, const char* last, long double& value, boost::charconv::chars_format fmt) noexcept
 {
     bool sign {};
-    std::uint64_t significand {};
-    std::int64_t  exponent {};
+    boost::uint128_type significand {};
+    std::int64_t exponent {};
 
     auto r = boost::charconv::detail::parser(first, last, sign, significand, exponent, fmt);
     if (r.ec != 0)
@@ -104,7 +106,29 @@ boost::charconv::from_chars_result boost::charconv::from_chars(const char* first
     }
 
     bool success {};
-    auto return_val = boost::charconv::detail::compute_float80(exponent, significand, sign, success);
+    long double return_val;
+    if (exponent >= 4892 || exponent <= -4932)
+    {
+        std::string tmp(first, last);
+        if (fmt == boost::charconv::chars_format::hex)
+        {
+            tmp.insert(0, "0x");
+        }
+
+        char* ptr = 0;
+        return_val = std::strtold(tmp.c_str(), &ptr);
+        r.ec = errno;
+        r.ptr = ptr;
+        if (r.ec == 0)
+        {
+            success = true;
+        }
+    }
+    else
+    {
+        return_val = boost::charconv::detail::compute_float80(exponent, significand, sign, success);
+    }
+
     if (!success)
     {
         value = 0.0L;
@@ -117,45 +141,21 @@ boost::charconv::from_chars_result boost::charconv::from_chars(const char* first
 
     return r;
 }
-#else
-
-boost::charconv::from_chars_result boost::charconv::from_chars(const char* first, const char* last, long double& value, boost::charconv::chars_format fmt) noexcept
-{
-    (void)fmt;
-    from_chars_result r = {};
-
-    std::string tmp( first, last ); // zero termination
-    char* ptr = 0;
-
-    value = std::strtold( tmp.c_str(), &ptr );
-
-    r.ptr = ptr;
-    r.ec = errno;
-
-    return r;
-}
-*/
-
-#if BOOST_CHARCONV_LDBL_BITS == 64 || defined(BOOST_MSVC)
-
-// Since long double is just a double we use the double implementation and cast into value
-boost::charconv::from_chars_result boost::charconv::from_chars(const char* first, const char* last, long double& value, boost::charconv::chars_format fmt) noexcept
-{
-    double d;
-    auto r = boost::charconv::from_chars(first, last, d, fmt);
-    value = static_cast<long double>(d);
-    return r;
-}
 
 #else
 
+// Fallback
 boost::charconv::from_chars_result boost::charconv::from_chars(const char* first, const char* last, long double& value, boost::charconv::chars_format fmt) noexcept
 {
-    (void)fmt;
     from_chars_result r = {};
 
-    std::string tmp( first, last ); // zero termination
+    std::string tmp(first, last); // zero termination
     char* ptr = 0;
+
+    if (fmt == boost::charconv::chars_format::hex)
+    {
+        tmp.insert(0, "0x");
+    }
 
     value = std::strtold( tmp.c_str(), &ptr );
 
